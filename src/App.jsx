@@ -28,7 +28,6 @@ const StickyLoader = () => (
     </div>
 );
 
-// --- Corporate Colors & Animations Component ---
 const CorporateStyles = () => (
   <style jsx global>{`
     :root {
@@ -54,7 +53,6 @@ const CorporateStyles = () => (
     }
   `}</style>
 );
-
 const Confetti = () => {
     const confettiCount = 100;
     const colors = ['#E85A4F', '#2D2D2D', '#3b82f6', '#10b981', '#f59e0b'];
@@ -75,7 +73,6 @@ const Confetti = () => {
         </div>
     );
 };
-
 const AnimatedCounter = ({ to, duration = 1500 }) => {
     const [count, setCount] = useState(0);
     useEffect(() => {
@@ -98,27 +95,33 @@ const AnimatedCounter = ({ to, duration = 1500 }) => {
 
     return <span>{count.toLocaleString('es-PE')}</span>;
 };
-
-// --- NEW COMPONENT: Invoice Summary Card ---
 const InvoiceSummaryCard = ({ data }) => (
     <div className="my-6 p-4 bg-gray-100 rounded-lg border border-gray-200 text-left">
-        <h3 className="text-sm font-bold text-corporate-dark mb-3">Resumen de la Operación</h3>
+        <h3 className="text-sm font-bold text-corporate-dark mb-3">Resumen de la Factura</h3>
         <div className="space-y-2 text-sm">
             <div className="flex justify-between">
                 <span className="text-gray-500">Factura:</span>
-                <span className="font-medium text-corporate-dark">{data.invoiceId}</span>
+                <span className="font-medium text-corporate-dark">{data.document_id}</span>
+            </div>
+             <div className="flex justify-between">
+                <span className="text-gray-500">Tu RUC (Emisor):</span>
+                <span className="font-medium text-corporate-dark">{data.client_ruc}</span>
             </div>
             <div className="flex justify-between">
                 <span className="text-gray-500">Deudor:</span>
-                <span className="font-medium text-corporate-dark">{data.debtorName}</span>
+                <span className="font-medium text-corporate-dark">{data.debtor_name}</span>
+            </div>
+             <div className="flex justify-between">
+                <span className="text-gray-500">RUC Deudor:</span>
+                <span className="font-medium text-corporate-dark">{data.debtor_ruc}</span>
             </div>
             <div className="flex justify-between">
                 <span className="text-gray-500">Fecha Emisión:</span>
-                <span className="font-medium text-corporate-dark">{data.issueDate}</span>
+                <span className="font-medium text-corporate-dark">{data.issue_date ? new Date(data.issue_date).toLocaleDateString('es-PE') : 'N/A'}</span>
             </div>
             <div className="flex justify-between">
                 <span className="text-gray-500">Monto Total:</span>
-                <span className="font-bold text-corporate-red">S/ {data.amount.toLocaleString('es-PE')}</span>
+                <span className="font-bold text-corporate-red">{data.currency} {data.total_amount?.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             {data.fileCount > 1 && (
                  <div className="pt-2 text-center text-xs text-gray-500 border-t border-gray-200 mt-2">
@@ -128,9 +131,6 @@ const InvoiceSummaryCard = ({ data }) => (
         </div>
     </div>
 );
-
-
-// --- Main Application Component ---
 
 export default function App() {
   const [step, setStep] = useState('upload');
@@ -171,53 +171,84 @@ export default function App() {
     setError('');
     setFiles(filesArray);
     setStep('analyzing');
-    runAnalysisSimulation(filesArray.length);
+    uploadAndAnalyzeFiles(filesArray);
   };
 
-  const runAnalysisSimulation = (fileCount) => {
-    const progressSteps = [
-      `Analizando ${fileCount} factura(s)...`,
-      '✓ Extrayendo RUCs de deudores...',
-      '✓ Consultando scores de riesgo en tiempo real...',
-      '✓ Calculando oferta consolidada...',
-    ];
-    
-    let currentStep = 0;
-    setAnalysisProgress([]);
-    const interval = setInterval(() => {
-      if (currentStep < progressSteps.length) {
-        setAnalysisProgress(prev => [...prev, progressSteps[currentStep]]);
-        currentStep++;
-      } else {
-        clearInterval(interval);
-        
-        let newResult;
-        if (fileCount === 1) newResult = 'PRE_APPROVED';
-        else if (fileCount === 2) newResult = 'MANUAL_REVIEW';
-        else newResult = 'EXPERT_REVIEW';
-        
-        setAnalysisResult(newResult);
-        // Add fictitious summary data
-        setAnalysisData({
-            approvedAmount: 30000,
-            fileCount: fileCount,
-            invoiceId: 'F001-4358',
-            debtorName: 'Comercializadora Andina S.A.C.',
-            issueDate: '08/08/2025',
-            amount: 30000
-        });
-        setStep('result');
+  const uploadAndAnalyzeFiles = async (filesToAnalyze) => {
+    setAnalysisProgress(['Analizando factura(s)...']);
+    const file = filesToAnalyze[0];
+    const backendFormData = new FormData();
+    backendFormData.append('xml_file', file);
+
+    try {
+      const response = await fetch('http://127.0.0.1:8000/verificar_ruc', {
+        method: 'POST',
+        body: backendFormData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Error del servidor');
       }
-    }, 1200);
+
+      const result = await response.json();
+      const { resultado, datos_factura, mensaje } = result;
+
+      setAnalysisProgress(prev => [...prev, `✓ ${mensaje}`]);
+      
+      setAnalysisResult(resultado); 
+      
+      setAnalysisData({
+          ...datos_factura,
+          approvedAmount: resultado === 'PREAPROBADO' ? datos_factura.total_amount : 0,
+          fileCount: filesToAnalyze.length,
+      });
+
+      setTimeout(() => {
+          setAnalysisProgress(prev => [...prev, '✓ ¡Análisis completado!']);
+          setStep('result');
+      }, 800);
+
+    } catch (err) {
+      setError(`Error de comunicación con el servidor: ${err.message}`);
+      setStep('upload');
+    }
   };
   
   const handleFormChange = (e) => setFormData({...formData, [e.target.name]: e.target.value});
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
-    console.log("Lead Capturado:", { ...formData, ...analysisData, result: analysisResult });
-    setFormSubmitted(true);
-  }
+
+    const leadData = {
+      email: formData.email,
+      phone: formData.phone,
+      analysisData: analysisData,
+      result: analysisResult,
+    };
+
+    try {
+      const response = await fetch('http://127.0.0.1:8000/guardar_contacto', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(leadData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'No se pudo guardar el contacto.');
+      }
+
+      console.log("Lead guardado exitosamente:", leadData);
+      setFormSubmitted(true);
+
+    } catch (err) {
+      console.error("Error al guardar el formulario:", err);
+      alert(`Error al guardar: ${err.message}`);
+    }
+}
 
   const resetApp = () => {
     setStep('upload');
@@ -267,9 +298,6 @@ export default function App() {
   );
 }
 
-
-// --- Step Components ---
-
 const UploadStep = ({ onDrag, onDrop, onChange, isDragActive, error, files }) => (
   <div className="text-center">
     <h2 className="text-2xl md:text-3xl font-bold text-corporate-dark">Liquidez para tu negocio en 60 segundos.</h2>
@@ -314,14 +342,13 @@ const AnalyzingStep = ({ progress }) => (
         </div>
     </div>
 );
-
 const ResultStep = ({ result, data, formData, formSubmitted, onFormChange, onFormSubmit, onReset }) => {
   if (formSubmitted) {
     return (
       <div className="text-center py-8 animate-fade-in-up">
         <CheckCircleIcon />
         <h2 className="text-2xl md:text-3xl font-bold text-corporate-dark mt-4">¡Perfecto!</h2>
-        <p className="mt-2 text-gray-600">Hemos recibido tu información. Un ejecutivo se pondrá en contacto contigo en breve con los siguientes pasos.</p>
+        <p className="mt-2 text-gray-600">Hemos recibido tu información. Un ejecutivo se pondrá en contacto contigo en breve.</p>
         <button onClick={onReset} className="mt-8 w-full sm:w-auto inline-flex justify-center items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-corporate-red bg-corporate-red-light hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-corporate-red transition-colors">
           Analizar otras facturas
         </button>
@@ -331,26 +358,32 @@ const ResultStep = ({ result, data, formData, formSubmitted, onFormChange, onFor
   
   const renderResultContent = () => {
     switch(result) {
-      case 'PRE_APPROVED':
+      case 'PREAPROBADO':
         return (
           <>
             <CheckCircleIcon />
             <h2 className="text-2xl md:text-3xl font-bold text-corporate-dark mt-4">¡Excelentes noticias!</h2>
-            <p className="mt-2 text-lg text-gray-600">Tu lote de {data.fileCount} factura(s) califica para un adelanto de hasta</p>
-            <p className="my-4 text-4xl md:text-5xl font-extrabold text-green-600 tracking-tight">S/ <AnimatedCounter to={data.approvedAmount} /></p>
+            <p className="mt-2 text-lg text-gray-600">Tu(s) factura(s) ha(n) sido pre aprobada(s), hasta por un monto de </p>
+            <p className="my-4 text-4xl md:text-5xl font-extrabold text-green-600 tracking-tight">{data.currency} <AnimatedCounter to={data.approvedAmount} /></p>
           </>
         );
-      case 'MANUAL_REVIEW':
-      case 'EXPERT_REVIEW':
+      case 'INTERMEDIO':
         return (
           <>
             <InfoCircleIcon />
             <h2 className="text-2xl md:text-3xl font-bold text-corporate-dark mt-4">¡Tu factura tiene potencial!</h2>
             <p className="mt-2 text-lg text-gray-600">
-              {result === 'MANUAL_REVIEW' 
-                ? `Hemos procesado tus ${data.fileCount} factura(s). Para darte la mejor oferta, uno de nuestros especialistas necesita hacer una validación adicional.`
-                : 'Esta operación tiene características especiales que queremos evaluar con un experto para construir una solución a tu medida.'
-              }
+              Hemos procesado tus factura. Para darte la mejor oferta, uno de nuestros especialistas necesita hacer una validación adicional.
+            </p>
+          </>
+        );
+      case 'RECHAZADO':
+        return (
+          <>
+            <InfoCircleIcon />
+            <h2 className="text-2xl md:text-3xl font-bold text-corporate-dark mt-4">¡Tu factura tiene potencial!</h2>
+            <p className="mt-2 text-lg text-gray-600">
+              Esta operación tiene características especiales que queremos evaluar con un experto para construir una solución a tu medida.
             </p>
           </>
         );
@@ -360,7 +393,7 @@ const ResultStep = ({ result, data, formData, formSubmitted, onFormChange, onFor
 
   return (
     <div className="animate-fade-in-up relative">
-      <Confetti />
+      {result === 'PREAPROBADO' && <Confetti />}
       <div className="text-center">{renderResultContent()}</div>
       
       {/* --- NEW: Invoice summary is now displayed here --- */}
@@ -385,7 +418,7 @@ const ResultStep = ({ result, data, formData, formSubmitted, onFormChange, onFor
         </div>
         <div>
           <button type="submit" className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-lg text-lg font-medium text-white bg-corporate-red hover:bg-corporate-red-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-corporate-red transition-all transform hover:scale-105">
-            Contactar a un especialista
+            Quiero obtener mi linea.
           </button>
         </div>
       </form>
