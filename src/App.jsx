@@ -255,7 +255,7 @@ export default function App() {
     });
 
     try {
-      const response = await fetch("https://facturas-service-598125168090.southamerica-west1.run.app/verificar_ruc", {
+      const response = await fetch('http://127.0.0.1:8000/verificar_ruc', {
         method: "POST",
         body: backendFormData,
       });
@@ -339,7 +339,7 @@ export default function App() {
     };
 
     try {
-      const response = await fetch('https://facturas-service-598125168090.southamerica-west1.run.app/guardar_contacto', {
+      const response = await fetch('http://127.0.0.1:8000/guardar_contacto', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -506,7 +506,7 @@ const UploadStep = ({
     </div>
 
     <p className="mt-6 text-xs font-bold text-black">
-      <bold>Solo aceptamos archivos XML para garantizar un análisis preciso einstantáneo.</bold>
+      <bold>Solo aceptamos archivos XML para garantizar un análisis preciso e instantáneo.</bold>
     </p>
   </div>
 );
